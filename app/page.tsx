@@ -27,7 +27,9 @@ const COLORS = {
   accentDark: '#EA580C',
   accentGlow: 'rgba(249, 115, 22, 0.15)',
   success: '#22C55E',
+  successMuted: '#16A34A',
   gold: '#FBBF24',
+  error: '#EF4444',
 };
 
 // ============================================
@@ -86,6 +88,404 @@ const GlowOrb = ({ delay = 0, size = 400, color = COLORS.accent, top, left, righ
     }}
   />
 );
+
+// ============================================
+// HERO CHART COMPONENT
+// ============================================
+
+const HeroChart = () => {
+  const [isVisible, setIsVisible] = useState(false);
+  const chartRef = useRef<HTMLDivElement>(null);
+  const isInView = useInView(chartRef, { once: true, margin: "-100px" });
+
+  useEffect(() => {
+    if (isInView) {
+      const timer = setTimeout(() => setIsVisible(true), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isInView]);
+
+  // Chart dimensions
+  const width = 600;
+  const height = 280;
+  const padding = { top: 30, right: 20, bottom: 40, left: 60 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+
+  // Generate realistic-looking data
+  const historicalMonths = 8;
+  
+  // Historical data (last 12 months with some volatility)
+  const startValue = 285000;
+  const currentValue = 678000;
+  const historicalData = Array.from({ length: historicalMonths + 1 }, (_, i) => {
+    const progress = i / historicalMonths;
+    const baseValue = startValue + (currentValue - startValue) * progress;
+    const volatility = Math.sin(i * 1.5) * 8000 + Math.cos(i * 0.7) * 5000;
+    return Math.round(baseValue + volatility);
+  });
+  historicalData[historicalData.length - 1] = currentValue; // Ensure last point is current
+
+  // Projection data (to FIRE target)
+  const fireTarget = 1500000;
+  const annualReturn = 0.08;
+  const projectionMonths = 144; // 12 years
+  const projectionData = Array.from({ length: Math.ceil(projectionMonths / 6) + 1 }, (_, i) => {
+    const months = i * 6;
+    const years = months / 12;
+    return Math.round(currentValue * Math.pow(1 + annualReturn, years));
+  }).filter(v => v <= fireTarget * 1.1);
+
+  // Years to FIRE
+  const yearsToFire = Math.log(fireTarget / currentValue) / Math.log(1 + annualReturn);
+  
+  // Combined data for scaling
+  const allValues = [...historicalData, ...projectionData, fireTarget];
+  const minValue = Math.min(...allValues) * 0.9;
+  const maxValue = Math.max(...allValues) * 1.05;
+
+  // Scale functions
+  const scaleX = (index: number, total: number) => 
+    padding.left + (index / (total - 1)) * (chartWidth * 0.3);
+  
+  const scaleY = (value: number) => 
+    padding.top + chartHeight - ((value - minValue) / (maxValue - minValue)) * chartHeight;
+
+  // Historical path
+  const historicalPath = historicalData.map((value, i) => {
+    const x = scaleX(i, historicalData.length);
+    const y = scaleY(value);
+    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+
+  // Historical area
+  const historicalArea = `${historicalPath} L ${scaleX(historicalData.length - 1, historicalData.length)} ${padding.top + chartHeight} L ${scaleX(0, historicalData.length)} ${padding.top + chartHeight} Z`;
+
+  // Projection path (starts from last historical point)
+  const projectionStartX = scaleX(historicalData.length - 1, historicalData.length);
+  const projectionPath = projectionData.map((value, i) => {
+    const x = projectionStartX + (i / (projectionData.length - 1)) * (chartWidth * 0.7);
+    const y = scaleY(value);
+    return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+
+  // Fire target line Y
+  const fireTargetY = scaleY(fireTarget);
+
+  // Find intersection point
+  const fireIntersectionX = projectionStartX + (chartWidth * 0.7) * (yearsToFire / (projectionData.length * 0.5));
+
+  // Y-axis labels
+  const yLabels = [0, 0.25, 0.5, 0.75, 1].map(p => ({
+    value: minValue + (maxValue - minValue) * p,
+    y: scaleY(minValue + (maxValue - minValue) * p),
+  }));
+
+  // Format currency
+  const formatValue = (v: number) => {
+    if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`;
+    if (v >= 1000) return `$${(v / 1000).toFixed(0)}K`;
+    return `$${v}`;
+  };
+
+  return (
+    <motion.div
+      ref={chartRef}
+      initial={{ opacity: 0, y: 40 }}
+      animate={{ opacity: isInView ? 1 : 0, y: isInView ? 0 : 40 }}
+      transition={{ duration: 0.8, delay: 0.3 }}
+      style={{
+        background: `linear-gradient(180deg, ${COLORS.card} 0%, ${COLORS.bgAlt} 100%)`,
+        borderRadius: 24,
+        padding: 24,
+        border: `1px solid ${COLORS.border}`,
+        maxWidth: 650,
+        margin: '0 auto',
+        boxShadow: `0 40px 80px ${COLORS.bg}80`,
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Glow effect */}
+      <div style={{
+        position: 'absolute',
+        top: -100,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: 300,
+        height: 200,
+        background: `radial-gradient(ellipse, ${COLORS.accent}20 0%, transparent 70%)`,
+        filter: 'blur(40px)',
+        pointerEvents: 'none',
+      }} />
+
+      {/* Chart header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 16,
+        position: 'relative',
+        zIndex: 1,
+      }}>
+        <div>
+          <div style={{ fontSize: 14, color: COLORS.textMuted, marginBottom: 4 }}>Portfolio Value</div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: isVisible ? 1 : 0 }}
+            transition={{ duration: 0.5, delay: 0.5 }}
+            style={{ fontSize: 28, fontWeight: 700, color: COLORS.text }}
+          >
+            $678,000
+          </motion.div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 14, color: COLORS.textMuted, marginBottom: 4 }}>FIRE Target</div>
+          <div style={{ fontSize: 20, fontWeight: 600, color: COLORS.gold }}>$1.5M</div>
+        </div>
+      </div>
+
+      {/* SVG Chart */}
+      <svg 
+        width="100%" 
+        height={height} 
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ overflow: 'visible' }}
+      >
+        <defs>
+          {/* Historical gradient */}
+          <linearGradient id="historicalGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={COLORS.success} stopOpacity="0.4" />
+            <stop offset="100%" stopColor={COLORS.success} stopOpacity="0" />
+          </linearGradient>
+          
+          {/* Projection gradient */}
+          <linearGradient id="projectionGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={COLORS.accent} stopOpacity="0.8" />
+            <stop offset="100%" stopColor={COLORS.gold} stopOpacity="0.8" />
+          </linearGradient>
+
+          {/* Glow filter */}
+          <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+            <feMerge>
+              <feMergeNode in="coloredBlur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        {/* Grid lines */}
+        {yLabels.map((label, i) => (
+          <g key={i}>
+            <line
+              x1={padding.left}
+              y1={label.y}
+              x2={width - padding.right}
+              y2={label.y}
+              stroke={COLORS.border}
+              strokeWidth={1}
+              strokeDasharray="4 4"
+              opacity={0.5}
+            />
+            <text
+              x={padding.left - 10}
+              y={label.y + 4}
+              fill={COLORS.textDim}
+              fontSize={11}
+              textAnchor="end"
+              fontFamily="system-ui"
+            >
+              {formatValue(label.value)}
+            </text>
+          </g>
+        ))}
+
+        {/* Projection zone background */}
+        <motion.rect
+          x={projectionStartX}
+          y={padding.top}
+          width={chartWidth * 0.7}
+          height={chartHeight}
+          fill={COLORS.accent}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: isVisible ? 0.05 : 0 }}
+          transition={{ duration: 0.5, delay: 1 }}
+        />
+
+        {/* FIRE target line */}
+        <motion.g
+          initial={{ opacity: 0 }}
+          animate={{ opacity: isVisible ? 1 : 0 }}
+          transition={{ duration: 0.5, delay: 1.2 }}
+        >
+          <line
+            x1={padding.left}
+            y1={fireTargetY}
+            x2={width - padding.right}
+            y2={fireTargetY}
+            stroke={COLORS.gold}
+            strokeWidth={2}
+            strokeDasharray="8 4"
+            opacity={0.8}
+          />
+          <text
+            x={width - padding.right - 5}
+            y={fireTargetY - 8}
+            fill={COLORS.gold}
+            fontSize={12}
+            fontWeight={600}
+            textAnchor="end"
+            fontFamily="system-ui"
+          >
+            🔥 FIRE
+          </text>
+        </motion.g>
+
+        {/* Historical area */}
+        <motion.path
+          d={historicalArea}
+          fill="url(#historicalGradient)"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: isVisible ? 1 : 0 }}
+          transition={{ duration: 0.8, delay: 0.5 }}
+        />
+
+        {/* Historical line */}
+        <motion.path
+          d={historicalPath}
+          fill="none"
+          stroke={COLORS.success}
+          strokeWidth={3}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          initial={{ pathLength: 0, opacity: 0 }}
+          animate={{ pathLength: isVisible ? 1 : 0, opacity: isVisible ? 1 : 0 }}
+          transition={{ duration: 1.5, delay: 0.5, ease: "easeOut" }}
+          filter="url(#glow)"
+        />
+
+        {/* Projection line */}
+        <motion.path
+          d={projectionPath}
+          fill="none"
+          stroke="url(#projectionGradient)"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray="8 4"
+          initial={{ pathLength: 0, opacity: 0 }}
+          animate={{ pathLength: isVisible ? 1 : 0, opacity: isVisible ? 0.9 : 0 }}
+          transition={{ duration: 2, delay: 1.5, ease: "easeOut" }}
+        />
+
+        {/* Current value point */}
+        <motion.g
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: isVisible ? 1 : 0, opacity: isVisible ? 1 : 0 }}
+          transition={{ duration: 0.3, delay: 1.8 }}
+        >
+          <circle
+            cx={projectionStartX}
+            cy={scaleY(currentValue)}
+            r={8}
+            fill={COLORS.bg}
+            stroke={COLORS.success}
+            strokeWidth={3}
+          />
+          <circle
+            cx={projectionStartX}
+            cy={scaleY(currentValue)}
+            r={4}
+            fill={COLORS.success}
+          />
+        </motion.g>
+
+        {/* FIRE intersection point */}
+        <motion.g
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: isVisible ? 1 : 0, opacity: isVisible ? 1 : 0 }}
+          transition={{ duration: 0.3, delay: 2.5 }}
+        >
+          <circle
+            cx={Math.min(fireIntersectionX, width - padding.right - 20)}
+            cy={fireTargetY}
+            r={8}
+            fill={COLORS.bg}
+            stroke={COLORS.gold}
+            strokeWidth={3}
+          />
+          <circle
+            cx={Math.min(fireIntersectionX, width - padding.right - 20)}
+            cy={fireTargetY}
+            r={4}
+            fill={COLORS.gold}
+          />
+        </motion.g>
+
+        {/* X-axis labels */}
+        <g>
+          <text x={padding.left} y={height - 10} fill={COLORS.textDim} fontSize={10} textAnchor="start" fontFamily="system-ui">12mo ago</text>
+          <text x={projectionStartX} y={height - 10} fill={COLORS.text} fontSize={11} fontWeight={600} textAnchor="middle" fontFamily="system-ui">Today</text>
+          <text x={width - padding.right} y={height - 10} fill={COLORS.gold} fontSize={11} fontWeight={600} textAnchor="end" fontFamily="system-ui">~10 years</text>
+        </g>
+      </svg>
+
+      {/* Chart legend */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        gap: 24,
+        marginTop: 16,
+        paddingTop: 16,
+        borderTop: `1px solid ${COLORS.border}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 16, height: 3, borderRadius: 2, background: COLORS.success }} />
+          <span style={{ fontSize: 12, color: COLORS.textMuted }}>Historical</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 16, height: 0, borderTop: `2px dashed ${COLORS.accent}` }} />
+          <span style={{ fontSize: 12, color: COLORS.textMuted }}>Projected (8%/yr)</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 16, height: 0, borderTop: `2px dashed ${COLORS.gold}` }} />
+          <span style={{ fontSize: 12, color: COLORS.textMuted }}>FIRE Target</span>
+        </div>
+      </div>
+
+      {/* FIRE date badge */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: isVisible ? 1 : 0, y: isVisible ? 0 : 10 }}
+        transition={{ duration: 0.5, delay: 2.8 }}
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          marginTop: 16,
+        }}
+      >
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '12px 20px',
+          borderRadius: 99,
+          background: `linear-gradient(135deg, ${COLORS.gold}20 0%, ${COLORS.accent}20 100%)`,
+          border: `1px solid ${COLORS.gold}40`,
+        }}>
+          <span style={{ fontSize: 24 }}>🔥</span>
+          <div>
+            <div style={{ fontSize: 12, color: COLORS.textMuted }}>Financial Freedom</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.text }}>
+              December 2037
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
 
 const SectionTitle = ({ children, subtitle }: { children: React.ReactNode; subtitle?: string }) => (
   <div style={{ textAlign: 'center', marginBottom: 64 }}>
@@ -579,7 +979,7 @@ export default function Home() {
           pointerEvents: 'none',
         }} />
 
-        <div style={{ maxWidth: 900, textAlign: 'center', position: 'relative', zIndex: 1 }}>
+        <div style={{ maxWidth: 1100, textAlign: 'center', position: 'relative', zIndex: 1 }}>
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -606,7 +1006,7 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
             style={{
-              fontSize: 'clamp(2.5rem, 8vw, 5rem)',
+              fontSize: 'clamp(2.5rem, 8vw, 4.5rem)',
               fontWeight: 800,
               lineHeight: 1.1,
               margin: 0,
@@ -629,7 +1029,7 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
             style={{
-              fontSize: 'clamp(1.1rem, 2.5vw, 1.4rem)',
+              fontSize: 'clamp(1.1rem, 2.5vw, 1.3rem)',
               color: COLORS.textMuted,
               maxWidth: 600,
               margin: '0 auto 40px',
@@ -644,7 +1044,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}
+            style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 60 }}
           >
             <a
               href="https://apps.apple.com"
@@ -708,51 +1108,8 @@ export default function Home() {
             </button>
           </motion.div>
 
-          {/* App Preview */}
-          <motion.div
-            initial={{ opacity: 0, y: 60 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.5 }}
-            style={{
-              marginTop: 80,
-              position: 'relative',
-            }}
-          >
-            <div style={{
-              background: `linear-gradient(180deg, ${COLORS.card} 0%, ${COLORS.bgAlt} 100%)`,
-              borderRadius: 32,
-              padding: 24,
-              border: `1px solid ${COLORS.border}`,
-              maxWidth: 320,
-              margin: '0 auto',
-              boxShadow: `0 40px 80px ${COLORS.bg}80`,
-            }}>
-              <div style={{
-                background: COLORS.bg,
-                borderRadius: 24,
-                padding: 32,
-                textAlign: 'center',
-              }}>
-                <div style={{ fontSize: 48, marginBottom: 8 }}>🔥</div>
-                <div style={{ color: COLORS.textMuted, fontSize: 14, marginBottom: 16 }}>
-                  Your path to financial freedom
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginBottom: 8 }}>
-                  <div>
-                    <div style={{ fontSize: 36, fontWeight: 700, color: COLORS.text }}>12</div>
-                    <div style={{ fontSize: 12, color: COLORS.textMuted }}>years</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 36, fontWeight: 700, color: COLORS.text }}>4</div>
-                    <div style={{ fontSize: 12, color: COLORS.textMuted }}>months</div>
-                  </div>
-                </div>
-                <div style={{ color: COLORS.gold, fontSize: 14, fontWeight: 600 }}>
-                  December 2037
-                </div>
-              </div>
-            </div>
-          </motion.div>
+          {/* Interactive Chart */}
+          <HeroChart />
         </div>
       </section>
 
@@ -930,7 +1287,7 @@ export default function Home() {
           <p><strong>Last updated:</strong> {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
           
           <h2 style={{ color: COLORS.text, marginTop: 32 }}>Introduction</h2>
-          <p>FirePal ("we", "our", or "us") respects your privacy and is committed to protecting your personal data. This privacy policy explains how we collect, use, and safeguard your information when you use our mobile application.</p>
+          <p>FirePal (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) respects your privacy and is committed to protecting your personal data. This privacy policy explains how we collect, use, and safeguard your information when you use our mobile application.</p>
 
           <h2 style={{ color: COLORS.text, marginTop: 32 }}>Information We Collect</h2>
           <p><strong>Portfolio Data:</strong> When you input your investment portfolio (via voice or text), this data is processed locally on your device and through our secure AI parsing service. We do not permanently store your portfolio details on our servers.</p>
@@ -945,7 +1302,7 @@ export default function Home() {
             <li>To improve and optimize our app</li>
           </ul>
 
-          <h2 style={{ color: COLORS.text, marginTop: 32 }}>Data Storage & Security</h2>
+          <h2 style={{ color: COLORS.text, marginTop: 32 }}>Data Storage &amp; Security</h2>
           <p>Your portfolio data is stored locally on your device using secure storage. We use industry-standard encryption for any data transmitted to our servers. We do not sell, trade, or rent your personal information to third parties.</p>
 
           <h2 style={{ color: COLORS.text, marginTop: 32 }}>Third-Party Services</h2>
@@ -965,11 +1322,11 @@ export default function Home() {
             <li>Request information about how your data is used</li>
           </ul>
 
-          <h2 style={{ color: COLORS.text, marginTop: 32 }}>Children's Privacy</h2>
+          <h2 style={{ color: COLORS.text, marginTop: 32 }}>Children&apos;s Privacy</h2>
           <p>FirePal is not intended for use by children under 13. We do not knowingly collect personal information from children under 13.</p>
 
           <h2 style={{ color: COLORS.text, marginTop: 32 }}>Changes to This Policy</h2>
-          <p>We may update this privacy policy from time to time. We will notify you of any changes by posting the new policy on this page and updating the "Last updated" date.</p>
+          <p>We may update this privacy policy from time to time. We will notify you of any changes by posting the new policy on this page and updating the &quot;Last updated&quot; date.</p>
 
           <h2 style={{ color: COLORS.text, marginTop: 32 }}>Contact Us</h2>
           <p>If you have questions about this privacy policy, please contact us at <a href="mailto:privacy@firepal.app" style={{ color: COLORS.accent }}>privacy@firepal.app</a></p>
@@ -1038,7 +1395,7 @@ export default function Home() {
             marginBottom: 32,
           }}>
             <h2 style={{ color: COLORS.text, marginTop: 0 }}>Contact Us</h2>
-            <p>Have questions, feedback, or need help? We're here for you.</p>
+            <p>Have questions, feedback, or need help? We&apos;re here for you.</p>
             <p><strong>Email:</strong> <a href="mailto:support@firepal.app" style={{ color: COLORS.accent }}>support@firepal.app</a></p>
             <p>We typically respond within 24-48 hours.</p>
           </div>
@@ -1046,7 +1403,7 @@ export default function Home() {
           <h2 style={{ color: COLORS.text }}>Frequently Asked Questions</h2>
 
           <h3 style={{ color: COLORS.text, marginTop: 24 }}>How accurate are the FIRE projections?</h3>
-          <p>Our projections are based on your portfolio's historical performance or standard market averages (7% annually). However, actual market returns are unpredictable. Use our projections as a planning tool, not a guarantee.</p>
+          <p>Our projections are based on your portfolio&apos;s historical performance or standard market averages (7% annually). However, actual market returns are unpredictable. Use our projections as a planning tool, not a guarantee.</p>
 
           <h3 style={{ color: COLORS.text, marginTop: 24 }}>How do I cancel my subscription?</h3>
           <p>To cancel your FirePal Pro subscription:</p>
@@ -1058,7 +1415,7 @@ export default function Home() {
           </ol>
 
           <h3 style={{ color: COLORS.text, marginTop: 24 }}>Is my financial data secure?</h3>
-          <p>Yes. Your portfolio data is stored locally on your device using secure storage. We don't store your portfolio details on our servers. See our Privacy Policy for more details.</p>
+          <p>Yes. Your portfolio data is stored locally on your device using secure storage. We don&apos;t store your portfolio details on our servers. See our Privacy Policy for more details.</p>
 
           <h3 style={{ color: COLORS.text, marginTop: 24 }}>What assets can FirePal track?</h3>
           <p>FirePal supports stocks, ETFs, cryptocurrencies, cash, bonds, and other assets. For stocks, ETFs, and crypto, we fetch real market prices. Other assets are tracked at the value you specify.</p>
